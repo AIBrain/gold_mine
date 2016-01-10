@@ -3,113 +3,94 @@ using System.IO;
 using System.Text;
 using Newtonsoft.Json;
 
+namespace GoldMine {
 
-namespace GoldMine
-    {
-    public static class Data
-        {
-        public struct AppData
-            {
-            public uint totalWins;
-            public uint bestTime;
+    public static class Data {
+        public static AppData DATA;
 
-            public int version;         // version of the loaded data structure (useful to compare with the application version, when updating from different versions that have incompatible changes)
-            }
+        private const Int32 DataVersion = 1;
 
-        static public AppData DATA;
+        private const String FileName = "data_debug.txt";
 
-        #if DEBUG
-            const string FILE_NAME = "data_debug.txt";
-        #else
-            const string FILE_NAME = "data.txt";
-        #endif
-        static string DATA_PATH = Path.Combine( Environment.GetFolderPath( Environment.SpecialFolder.LocalApplicationData ), "gold_mine", Data.FILE_NAME );
+        private static String _dataPATH = Path.Combine( Environment.GetFolderPath( Environment.SpecialFolder.LocalApplicationData ), "gold_mine", FileName );
 
-        const int DATA_VERSION = 1;  // current version of the application data
+        public static void Load() {
+            try {
+                var file = new StreamReader( _dataPATH, Encoding.UTF8 );
 
-
-        static public void load()
-            {
-            try
-                {
-                StreamReader file = new StreamReader( Data.DATA_PATH, Encoding.UTF8 );
-
-                string jsonData = file.ReadToEnd();
+                var jsonData = file.ReadToEnd();
                 file.Close();
 
-                Data.DATA = JsonConvert.DeserializeObject<AppData>( jsonData );
+                DATA = JsonConvert.DeserializeObject<AppData>( jsonData );
 
-                if ( Data.DATA.version != Data.DATA_VERSION )
-                    {
-                    Data.update();
-                    }
-                }
-
-            catch( Exception )
-                {
-                Data.loadDefaults();
+                if ( DATA.Version != DataVersion ) {
+                    Update();
                 }
             }
+            catch ( Exception ) {
+                LoadDefaults();
+            }
+        }
 
+        public static UInt32 OneMoreWin( UInt32 time ) {
+            DATA.TotalWins++;
 
-        static private void loadDefaults()
-            {
-            Data.DATA = new AppData();
-
-            Data.DATA.totalWins = 0;
-            Data.DATA.bestTime = 0;
-            Data.DATA.version = Data.DATA_VERSION;
+            // first win
+            if ( DATA.BestTime == 0 ) {
+                DATA.BestTime = time;
+            }
+            else if ( time < DATA.BestTime ) {
+                DATA.BestTime = time;
             }
 
+            Save();
 
-        /**
-         * Update the data from a previous version.
-         */
-        static private void update()
-            {
-                // no updates yet
-            }
-        
+            return DATA.BestTime;
+        }
 
-        static private void save()
-            {
-            string dataJson = JsonConvert.SerializeObject( Data.DATA );
+        public static void ResetStatistics() {
+            DATA.TotalWins = 0;
+            DATA.BestTime = 0;
+            Save();
+        }
 
-                // make sure there's a directory created (otherwise the stream writer call will fail)
-            System.IO.Directory.CreateDirectory( Path.GetDirectoryName( Data.DATA_PATH ) );
-            StreamWriter file = new StreamWriter( Data.DATA_PATH, false, Encoding.UTF8 );
+        // current version of the application data
+        private static void LoadDefaults() {
+            DATA = new AppData {
+                TotalWins = 0,
+                BestTime = 0,
+                Version = DataVersion
+            };
+        }
+
+        private static void Save() {
+            var dataJson = JsonConvert.SerializeObject( DATA );
+
+            // make sure there's a directory created (otherwise the stream writer call will fail)
+            Directory.CreateDirectory( Path.GetDirectoryName( _dataPATH ) );
+            var file = new StreamWriter( _dataPATH, false, Encoding.UTF8 );
 
             file.Write( dataJson );
             file.Close();
-            }
-
-
-        static public uint oneMoreWin( uint time )
-            {
-            Data.DATA.totalWins++;
-            
-                // first win
-            if ( Data.DATA.bestTime == 0 )
-                {
-                Data.DATA.bestTime = time;
-                }
-
-            else if ( time < Data.DATA.bestTime )
-                {
-                Data.DATA.bestTime = time;
-                }
-
-            Data.save();
-
-            return Data.DATA.bestTime;
-            }
-
-
-        static public void resetStatistics()
-            {
-            Data.DATA.totalWins = 0;
-            Data.DATA.bestTime = 0;
-            Data.save();
-            }
         }
+
+        private static void Update() {
+
+            // no updates yet
+        }
+
+        public struct AppData {
+            public UInt32 BestTime;
+            public UInt32 TotalWins;
+            public Int32 Version;         // version of the loaded data structure (useful to compare with the application version, when updating from different versions that have incompatible changes)
+        }
+
+#if DEBUG
+#else
+            const string FILE_NAME = "data.txt";
+#endif
+        /**
+         * Update the data from a previous version.
+         */
     }
+}

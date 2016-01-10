@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:GoldMine"
         mc:Ignorable="d"
-        Title="Statistics" 
+        Title="Statistics"
         Height="150" Width="250"
         WindowStartupLocation="CenterScreen"
         Background="LightGray">
@@ -20,18 +20,18 @@
             <ColumnDefinition />
             <ColumnDefinition />
         </Grid.ColumnDefinitions>
-        
+
         <TextBlock Grid.Column="0" Grid.Row="0">Total wins:</TextBlock>
         <TextBlock Name="TotalWins" Grid.Column="1" Grid.Row="0">x</TextBlock>
-      
+
         <TextBlock Grid.Column="0" Grid.Row="1">Best time:</TextBlock>
         <TextBlock Name="BestTime" Grid.Column="1" Grid.Row="1">x</TextBlock>
-        
+
         <Separator Grid.Row="2" Grid.ColumnSpan="2" />
-        
+
         <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-            <Button Margin="2" Click="resetStatistics">Reset</Button>
-            <Button Margin="2" Click="closeWindow">Close</Button>
+            <Button Margin="2" Click="ResetStatistics">Reset</Button>
+            <Button Margin="2" Click="CloseWindow">Close</Button>
         </StackPanel>
     </Grid>
 </Window>

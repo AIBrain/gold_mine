@@ -1,368 +1,306 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Timers;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 
+namespace GoldMine {
 
-namespace GoldMine
-    {
-    public partial class MainWindow : Window
-        {
-            // data use for the drag and drop operation of cards
-        public struct Drag
-            {
-            public bool isDragging;
-            public const int diff = 25;            // space between each card during the drag
-            public List<Card> cardsDragging;
-            public Point clickPosition;
-            public Container originalContainer;    // original container before the drag occurred. if the drag isn't valid, we need to return the cards to the original place
-            public Container highlightedContainer; // when dragging a card on top of a container, highlight that container, and keep a reference to it (to know when to remove the highlight)
-            }
+    public partial class MainWindow {
+        private readonly List<Card> _cards = new List<Card>();
 
-        Drag drag;
-        Timer timer;
-        uint secondsPassed;
+        private readonly List<Container> _droppableElements = new List<Container>();
+        private readonly List<Foundation> _foundations = new List<Foundation>();
+        private readonly Stock _stock;
+        private readonly List<Tableau> _tableaus = new List<Tableau>();
+        private readonly Timer _timer;
+        private readonly Waste _waste;
+        private Drag _drag;
+        private UInt32 _secondsPassed;
 
-        List<Container> droppableElements = new List<Container>();
-        List<Card> cards = new List<Card>();
-        Stock stock;
-        Waste waste;
-        List<Foundation> foundations = new List<Foundation>();
-        List<Tableau> tableaus = new List<Tableau>();
-
-
-        public MainWindow()
-            {
+        public MainWindow() {
             InitializeComponent();
 
-            this.drag.cardsDragging = new List<Card>();
-            this.timer = new Timer( 1000 );
-            this.timer.Elapsed += this.onTimeElapsed;
+            this._drag.CardsDragging = new List<Card>();
+            this._timer = new Timer( 1000 );
+            this._timer.Elapsed += this.OnTimeElapsed;
 
-            this.setupKeyboardShortcuts();
-            Data.load();
+            this.SetupKeyboardShortcuts();
+            Data.Load();
 
-                // initialize all the game elements
-            this.stock = new Stock();
-            this.stock.MouseUp += this.onStockMouseUp;
-            this.MainCanvas.Children.Add( this.stock );
+            // initialize all the game elements
+            this._stock = new Stock();
+            this._stock.MouseUp += this.OnStockMouseUp;
+            this.MainCanvas.Children.Add( this._stock );
 
-            this.waste = new Waste();
-            this.MainCanvas.Children.Add( this.waste );
+            this._waste = new Waste();
+            this.MainCanvas.Children.Add( this._waste );
 
-            for (int a = 0 ; a < 4 ; a++)
-                {
+            for ( var a = 0; a < 4; a++ ) {
                 var foundation = new Foundation();
 
                 this.MainCanvas.Children.Add( foundation );
-                this.droppableElements.Add( foundation );
-                this.foundations.Add( foundation );
-                }
+                this._droppableElements.Add( foundation );
+                this._foundations.Add( foundation );
+            }
 
-            for (int a = 0 ; a < 7 ; a++)
-                {
+            for ( var a = 0; a < 7; a++ ) {
                 var tableau = new Tableau();
 
                 this.MainCanvas.Children.Add( tableau );
-                this.droppableElements.Add( tableau );
-                this.tableaus.Add( tableau );
-                }
+                this._droppableElements.Add( tableau );
+                this._tableaus.Add( tableau );
+            }
 
-            foreach( Card.Suit suit in Enum.GetValues( typeof( Card.Suit ) ) )
-                {
-                foreach( Card.Value value in Enum.GetValues( typeof( Card.Value ) ) )
-                    {
+            foreach ( Card.Suit suit in Enum.GetValues( typeof( Card.Suit ) ) ) {
+                foreach ( Card.Value value in Enum.GetValues( typeof( Card.Value ) ) ) {
                     var card = new Card( suit, value );
 
                     card.MouseDown += this.onMouseDown;
                     card.MouseMove += this.onMouseMove;
                     card.MouseUp += this.onMouseUp;
 
-                    this.cards.Add( card );
-                    }
+                    this._cards.Add( card );
                 }
-
-            this.startGame();
             }
 
+            this.StartGame();
+        }
 
-        private void setupKeyboardShortcuts()
-            {
-                // ctrl + n -- start a new game
-            var newGame = new RoutedCommand();
-            newGame.InputGestures.Add( new KeyGesture( Key.N, ModifierKeys.Control ) );
-            CommandBindings.Add( new CommandBinding( newGame, this.newGameClick ) );
+        private Utilities.Box CardsDimension( List<Card> cards ) {
+            var firstCard = cards[ 0 ];
+            return new Utilities.Box {
+                X = Canvas.GetLeft( firstCard ),
+                Y = Canvas.GetTop( firstCard ),
+                Width = firstCard.ActualWidth,
+                Height = firstCard.ActualHeight + Drag.Diff * ( cards.Count - 1 )
+            };
+        }
 
-                // ctrl + r -- restart the game
-            var restart = new RoutedCommand();
-            restart.InputGestures.Add( new KeyGesture( Key.R, ModifierKeys.Control ) );
-            CommandBindings.Add( new CommandBinding( restart, this.restartGame ) );
+        private void CheckGameEnd() {
+            var cardCount = this._cards.Count;
+            var foundationCount = 0;
 
-                // ctrl + s -- open the statistics window
-            var openStatistics = new RoutedCommand();
-            openStatistics.InputGestures.Add( new KeyGesture( Key.S, ModifierKeys.Control ) );
-            CommandBindings.Add( new CommandBinding( openStatistics, this.openStatisticsWindow ) );
-
-                // ctrl + f -- try to move all the possible cards to the foundation
-            var moveToFoundation = new RoutedCommand();
-            moveToFoundation.InputGestures.Add( new KeyGesture( Key.F, ModifierKeys.Control ) );
-            CommandBindings.Add( new CommandBinding( moveToFoundation, this.toFoundationClick ) );
-
-                // ctrl + a -- open the about webpage
-            var openAbout = new RoutedCommand();
-            openAbout.InputGestures.Add( new KeyGesture( Key.A, ModifierKeys.Control ) );
-            CommandBindings.Add( new CommandBinding( openAbout, this.openAboutPage ) );
-            }
-
-
-        private void startGame( bool shuffle = true )
-            {
-                // disconnect the cards from their previous container
-            foreach( Card card in this.cards )
-                {
-                var parent = card.Parent as Panel;
-
-                if ( parent != null )
-                    {
-                    parent.Children.Remove( card );
-                    }
-                }
-
-            if ( shuffle == true )
-                {
-                Utilities.shuffle( this.cards );
-                }
-
-                // add all the shuffled cards to the stock
-            foreach( Card card in this.cards )
-                {
-                card.showBack();
-                this.stock.Children.Add( card );
-                }
-
-            this.updateStockLeft();
-            this.timer.Stop();
-            this.secondsPassed = 0;
-            this.updateTimePassed();
-            this.timer.Start();
-            }
-
-
-        /**
-         * Checks if the game has ended, and if so then show a message.
-         * The game is over when all the cards are in the foundations.
-         */
-        private void checkGameEnd()
-            {
-            int cardCount = this.cards.Count;
-            int foundationCount = 0;
-
-            foreach( var foundation in this.foundations )
-                {
+            foreach ( var foundation in this._foundations ) {
                 foundationCount += foundation.Children.Count;
-                }
+            }
 
-                // game has ended
-            if ( cardCount == foundationCount )
-                {
-                this.timer.Stop();
+            // game has ended
+            if ( cardCount == foundationCount ) {
+                this._timer.Stop();
 
-                var best = Data.oneMoreWin( this.secondsPassed );
-                var message = String.Format( "You Win!\nTime: {0}", Utilities.timeToString( (int) this.secondsPassed ) );
-                  
-                if ( this.secondsPassed == best )
-                    {
+                var best = Data.OneMoreWin( this._secondsPassed );
+                var message = String.Format( "You Win!\nTime: {0}", Utilities.TimeToString( ( Int32 )this._secondsPassed ) );
+
+                if ( this._secondsPassed == best ) {
                     message += "\nYou beat your best time!";
-                    }
+                }
 
                 MessageBox.Show( message, "Game Over!", MessageBoxButton.OK );
-                this.startGame();
+                this.StartGame();
+            }
+        }
+
+        private Container CollisionDetection( List<Card> cards ) {
+            var cardsBox = this.CardsDimension( cards );
+            Container colliding = null;
+            Double collidingArea = 0;
+
+            for ( var a = 0; a < this._droppableElements.Count; a++ ) {
+                var container = this._droppableElements[ a ];
+
+                if ( container != this._drag.OriginalContainer && container.CanDrop( cards ) ) {
+                    var containerBox = container.GetDimensionBox();
+
+                    var area = Utilities.CalculateIntersectionArea( cardsBox, containerBox );
+
+                    if ( area > collidingArea ) {
+                        collidingArea = area;
+                        colliding = container;
+                    }
                 }
             }
 
+            return colliding;
+        }
 
-        /**
-         * When we click on the stock, we move 3 cards to the waste.
-         */
-        private void onStockMouseUp( object sender, MouseButtonEventArgs e )
-            {
-            var count = this.stock.Children.Count;
+        private Boolean IsCardDraggable( Card card ) {
+            var parent = card.Parent;
 
-            for (int a = 0 ; a < 3 && count > 0 ; a++)
-                {
-                int lastPosition = count - 1;
+            if ( parent is Stock ) {
+                return false;
+            }
 
-                var card = (Card) this.stock.Children[ lastPosition ];
-                this.stock.Children.RemoveAt( lastPosition );
-                this.waste.Children.Add( card );
+            // the last card is draggable, the others aren't
+            if ( parent is Waste ) {
+                if ( this._waste.Children.Count != 0 ) {
+                    var last = this._waste.Children[ this._waste.Children.Count - 1 ];
+
+                    if ( last != card ) {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        private void MoveCards( List<Card> cards, Container container ) {
+            if ( this._drag.HighlightedContainer != null ) {
+                this._drag.HighlightedContainer.RemoveDropEffect();
+                this._drag.HighlightedContainer = null;
+            }
+
+            foreach ( var card in cards ) {
+                var parent = card.Parent as Panel;
+                parent.Children.Remove( card );
+                container.Children.Add( card );
+            }
+
+            this._drag.OriginalContainer = null;
+            this._drag.CardsDragging.Clear();
+            this._drag.IsDragging = false;
+        }
+
+        private void NewGameClick( Object sender, RoutedEventArgs e ) {
+            this.StartGame();
+        }
+
+        private void onMouseDown( Object sender, MouseButtonEventArgs e ) {
+            var card = ( Card )sender;
+            var parent = card.Parent as Container;
+
+            if ( !this.IsCardDraggable( card ) ) {
+                return;
+            }
+
+            if ( e.ClickCount == 2 ) {
+                this.SendToFoundation( parent );
+                return;
+            }
+
+            if ( this._drag.IsDragging == true ) {
+                this.MoveCards( this._drag.CardsDragging, this._drag.OriginalContainer );
+                return;
+            }
+
+            this._drag.IsDragging = true;
+            this._drag.ClickPosition = Mouse.GetPosition( card );
+            this._drag.OriginalContainer = parent;
+            parent.DragCards( card, this._drag.CardsDragging );
+
+            foreach ( var dragCard in this._drag.CardsDragging ) {
+                parent.Children.Remove( dragCard );
+                this.MainCanvas.Children.Add( dragCard );
+            }
+
+            this.PositionCards( this._drag.CardsDragging, e );
+        }
+
+        private void onMouseMove( Object sender, MouseEventArgs e ) {
+            if ( this._drag.IsDragging ) {
+                if ( e.LeftButton == MouseButtonState.Released ) {
+                    this.MoveCards( this._drag.CardsDragging, this._drag.OriginalContainer );
+                }
+                else {
+                    this.PositionCards( this._drag.CardsDragging, e );
+                }
+            }
+        }
+
+        private void onMouseUp( Object sender, MouseButtonEventArgs e ) {
+            if ( !this._drag.IsDragging ) {
+                return;
+            }
+
+            var container = this.CollisionDetection( this._drag.CardsDragging );
+
+            if ( container != null ) {
+                this.MoveCards( this._drag.CardsDragging, container );
+                this.CheckGameEnd();
+            }
+
+            // wasn't dropped on any container, so its not a valid drag operation. return to the original container
+            else {
+                this.MoveCards( this._drag.CardsDragging, this._drag.OriginalContainer );
+            }
+        }
+
+        private void OnSizeChange( Object sender, SizeChangedEventArgs e ) {
+            this.PositionResizeElements();
+        }
+
+        private void OnStateChange( Object sender, EventArgs e ) {
+            this.PositionResizeElements();
+        }
+
+        private void OnStockMouseUp( Object sender, MouseButtonEventArgs e ) {
+            var count = this._stock.Children.Count;
+
+            for ( var a = 0; a < 3 && count > 0; a++ ) {
+                var lastPosition = count - 1;
+
+                var card = ( Card )this._stock.Children[ lastPosition ];
+                this._stock.Children.RemoveAt( lastPosition );
+                this._waste.Children.Add( card );
 
                 card.showFront();
 
-                count = this.stock.Children.Count;
-                }
-
-            this.updateStockLeft();
+                count = this._stock.Children.Count;
             }
 
+            this.UpdateStockLeft();
+        }
 
-        /**
-         * Try to send the last card of a container to a foundation.
-         */
-        private bool sendToFoundation( Container container )
-            {
-            var last = container.getLast();
+        private void OnTimeElapsed( Object source, ElapsedEventArgs e ) {
+            this.Dispatcher.Invoke( () => {
+                this._secondsPassed++;
+                this.UpdateTimePassed();
+            } );
+        }
 
-                // need to have a list to work with the 'canDrop' function
-            var cards = new List<Card>();
-            cards.Add( last );
+        private void OnWindowClosing( Object sender, System.ComponentModel.CancelEventArgs e ) {
+            this._timer.Stop();
+        }
 
-            foreach( var foundation in this.foundations )
-                {
-                if ( foundation.canDrop( cards ) )
-                    {
-                    this.moveCards( cards, foundation );
-                    this.checkGameEnd();
-                    return true;
-                    }
-                }
+        private void OpenAboutPage( Object sender, RoutedEventArgs e ) {
+            System.Diagnostics.Process.Start( "https://bitbucket.org/drk4/gold_mine" );
+        }
 
-            return false;
+        private void OpenStatisticsWindow( Object sender, RoutedEventArgs e ) {
+            var statistics = new Statistics();
+            statistics.ShowDialog();
+        }
+
+        private void PositionCards( List<Card> cards, MouseEventArgs e ) {
+            var position = e.GetPosition( this.MainCanvas );
+
+            for ( var a = 0; a < cards.Count; a++ ) {
+                Canvas.SetLeft( cards[ a ], position.X - this._drag.ClickPosition.X );
+                Canvas.SetTop( cards[ a ], position.Y - this._drag.ClickPosition.Y + Drag.Diff * a );
             }
 
+            var container = this.CollisionDetection( cards );
 
-        /**
-         * Calculates the intersection area between the reference element and the droppable elements, and returns the one where the area was higher.
-         */
-        private Container collisionDetection( List<Card> cards )
-            {
-            var cardsBox = this.cardsDimension( cards );
-            Container colliding = null;
-            double collidingArea = 0;
-
-            for (var a = 0 ; a < this.droppableElements.Count ; a++)
-                {
-                var container = this.droppableElements[ a ];
-
-                if ( container != this.drag.originalContainer && container.canDrop( cards ) )
-                    {
-                    var containerBox = container.getDimensionBox();
-
-                    var area = Utilities.calculateIntersectionArea( cardsBox, containerBox );
-
-                    if ( area > collidingArea )
-                        {
-                        collidingArea = area;
-                        colliding = container;
-                        }
-                    }
-                }
-                
-            return colliding;
+            if ( this._drag.HighlightedContainer != null ) {
+                this._drag.HighlightedContainer.RemoveDropEffect();
+                this._drag.HighlightedContainer = null;
             }
 
+            if ( container != null ) {
+                container.ApplyDropEffect();
 
-        private void onMouseDown( object sender, MouseButtonEventArgs e )
-            {
-            var card = (Card) sender;
-            var parent = card.Parent as Container;
-
-            if ( !this.isCardDraggable( card ) )
-                {
-                return;
-                }
-
-            if ( e.ClickCount == 2 )
-                {
-                this.sendToFoundation( parent );
-                return;
-                }
-
-            if ( this.drag.isDragging == true )
-                {
-                this.moveCards( this.drag.cardsDragging, this.drag.originalContainer );
-                return;
-                }
-
-            this.drag.isDragging = true;
-            this.drag.clickPosition = Mouse.GetPosition( card );
-            this.drag.originalContainer = parent;
-            parent.dragCards( card, this.drag.cardsDragging );
-
-            foreach( Card dragCard in this.drag.cardsDragging )
-                {
-                parent.Children.Remove( dragCard );
-                this.MainCanvas.Children.Add( dragCard );
-                }
-
-            this.positionCards( this.drag.cardsDragging, e );
+                this._drag.HighlightedContainer = container;
             }
+        }
 
+        private void PositionResizeElements() {
 
-        private void onMouseMove( object sender, MouseEventArgs e )
-            {
-            if ( this.drag.isDragging )
-                {
-                if ( e.LeftButton == MouseButtonState.Released )
-                    {
-                    this.moveCards( this.drag.cardsDragging, this.drag.originalContainer );
-                    }
-
-                else
-                    {
-                    this.positionCards( this.drag.cardsDragging, e );
-                    }
-                }
-            }
-
-
-        private void onMouseUp( object sender, MouseButtonEventArgs e )
-            {
-            if ( !this.drag.isDragging )
-                {
-                return;
-                }
-
-            var container = this.collisionDetection( this.drag.cardsDragging );
-
-            if ( container != null )
-                {
-                this.moveCards( this.drag.cardsDragging, container );
-                this.checkGameEnd();
-                }
-
-                // wasn't dropped on any container, so its not a valid drag operation. return to the original container
-            else
-                {
-                this.moveCards( this.drag.cardsDragging, this.drag.originalContainer );
-                }
-            }
-
-        
-        /**
-         * When the window is resized, we need to reposition the game elements.
-         */
-        private void onSizeChange( object sender, SizeChangedEventArgs e )
-            {
-            this.positionResizeElements();
-            }
-
-
-        private void onStateChange( object sender, EventArgs e )
-            {
-            this.positionResizeElements();
-            }
-
-
-        /**
-         * Position/resize all the elements in the right place (given the current width/height of the canvas).
-         */
-        private void positionResizeElements()
-            {
-                // the layout is a grid with 7 columns and 3 lines
-                // each position has space for a card + margin
-                // we calculate these values from the available window dimensions
+            // the layout is a grid with 7 columns and 3 lines
+            // each position has space for a card + margin
+            // we calculate these values from the available window dimensions
             var canvasWidth = this.MainCanvas.ActualWidth;
             var canvasHeight = this.MainCanvas.ActualHeight;
             var positionWidth = canvasWidth / 7;
@@ -372,259 +310,218 @@ namespace GoldMine
             var cardHeight = positionHeight * 0.9;
             var cardWidth = cardHeight * Card.Ratio;
 
-            if ( cardWidth > availableCardWidth )
-                {
+            if ( cardWidth > availableCardWidth ) {
                 cardWidth = availableCardWidth;
                 cardHeight = cardWidth / Card.Ratio;
-                }
+            }
 
-            var horizontalMargin = (positionWidth - cardWidth) / 2;   // divide by 2 since there's margin in both sides
-            var verticalMargin = (positionHeight - cardHeight) / 2;
+            var horizontalMargin = ( positionWidth - cardWidth ) / 2;   // divide by 2 since there's margin in both sides
+            var verticalMargin = ( positionHeight - cardHeight ) / 2;
 
-                // resize all the elements
-            foreach( Card card in this.cards )
-                {
+            // resize all the elements
+            foreach ( var card in this._cards ) {
                 card.Height = cardHeight;   // the image will maintain the aspect ratio, so only need to set one
-                }
+            }
 
-            foreach( Tableau tableau in this.tableaus )
-                {
+            foreach ( var tableau in this._tableaus ) {
                 tableau.Width = cardWidth;
                 tableau.Height = cardHeight;
-                }
+            }
 
-            foreach( Foundation foundation in this.foundations )
-                {
+            foreach ( var foundation in this._foundations ) {
                 foundation.Width = cardWidth;
                 foundation.Height = cardHeight;
-                }
+            }
 
-            this.waste.Width = cardWidth;
-            this.waste.Height = cardHeight;
+            this._waste.Width = cardWidth;
+            this._waste.Height = cardHeight;
 
-            this.stock.Width = cardWidth;
-            this.stock.Height = cardHeight;
+            this._stock.Width = cardWidth;
+            this._stock.Height = cardHeight;
 
-                // position all the elements
-                // add the stock element in the top left
-            double left = horizontalMargin;
-            double top = verticalMargin;
-            
-            Canvas.SetLeft( this.stock, left );
-            Canvas.SetTop( this.stock, top );
+            // position all the elements
+            // add the stock element in the top left
+            var left = horizontalMargin;
+            var top = verticalMargin;
 
-                // add the waste element next to the stock
+            Canvas.SetLeft( this._stock, left );
+            Canvas.SetTop( this._stock, top );
+
+            // add the waste element next to the stock
             left += cardWidth + horizontalMargin * 2;
 
-            Canvas.SetLeft( this.waste, left );
-            Canvas.SetTop( this.waste, top );
+            Canvas.SetLeft( this._waste, left );
+            Canvas.SetTop( this._waste, top );
 
-                // add the foundations in the top right corner (the foundation is to where the cards need to be stacked (starting on an ace until the king)
+            // add the foundations in the top right corner (the foundation is to where the cards need to be stacked (starting on an ace until the king)
             left = canvasWidth - cardWidth - horizontalMargin;
 
-            foreach( var foundation in this.foundations )
-                {
+            foreach ( var foundation in this._foundations ) {
                 Canvas.SetLeft( foundation, left );
                 Canvas.SetTop( foundation, top );
 
                 left -= cardWidth + 2 * horizontalMargin;
-                }
+            }
 
-                // add the tableau piles (where you can move any card to)
+            // add the tableau piles (where you can move any card to)
             left = horizontalMargin;
             top += cardHeight + verticalMargin;
 
-            foreach( var tableau in this.tableaus )
-                {
+            foreach ( var tableau in this._tableaus ) {
                 Canvas.SetLeft( tableau, left );
                 Canvas.SetTop( tableau, top );
 
                 left += cardWidth + 2 * horizontalMargin;
-                }
+            }
+        }
+
+        private void RestartGame( Object sender, RoutedEventArgs e ) {
+            this.StartGame( false );
+        }
+
+        private Boolean SendToFoundation( Container container ) {
+            var last = container.GetLast();
+
+            // need to have a list to work with the 'canDrop' function
+            var cards = new List<Card> { last };
+
+            foreach ( var foundation in this._foundations.Where( foundation => foundation.CanDrop( cards ) ) ) {
+                this.MoveCards( cards, foundation );
+                this.CheckGameEnd();
+                return true;
             }
 
+            return false;
+        }
 
+        private void SetupKeyboardShortcuts() {
+
+            // ctrl + n -- start a new game
+            var newGame = new RoutedCommand();
+            newGame.InputGestures.Add( new KeyGesture( Key.N, ModifierKeys.Control ) );
+            CommandBindings.Add( new CommandBinding( newGame, this.NewGameClick ) );
+
+            // ctrl + r -- restart the game
+            var restart = new RoutedCommand();
+            restart.InputGestures.Add( new KeyGesture( Key.R, ModifierKeys.Control ) );
+            CommandBindings.Add( new CommandBinding( restart, this.RestartGame ) );
+
+            // ctrl + s -- open the statistics window
+            var openStatistics = new RoutedCommand();
+            openStatistics.InputGestures.Add( new KeyGesture( Key.S, ModifierKeys.Control ) );
+            CommandBindings.Add( new CommandBinding( openStatistics, this.OpenStatisticsWindow ) );
+
+            // ctrl + f -- try to move all the possible cards to the foundation
+            var moveToFoundation = new RoutedCommand();
+            moveToFoundation.InputGestures.Add( new KeyGesture( Key.F, ModifierKeys.Control ) );
+            CommandBindings.Add( new CommandBinding( moveToFoundation, this.ToFoundationClick ) );
+
+            // ctrl + a -- open the about webpage
+            var openAbout = new RoutedCommand();
+            openAbout.InputGestures.Add( new KeyGesture( Key.A, ModifierKeys.Control ) );
+            CommandBindings.Add( new CommandBinding( openAbout, this.OpenAboutPage ) );
+        }
+
+        private void StartGame( Boolean shuffle = true ) {
+
+            // disconnect the cards from their previous container
+            foreach ( var card in this._cards ) {
+                var parent = card.Parent as Panel;
+
+                parent?.Children.Remove( card );
+            }
+
+            if ( shuffle ) {
+                this._cards.Shuffle();
+            }
+
+            // add all the shuffled cards to the stock
+            foreach ( var card in this._cards ) {
+                card.ShowBack();
+                this._stock.Children.Add( card );
+            }
+
+            this.UpdateStockLeft();
+            this._timer.Stop();
+            this._secondsPassed = 0;
+            this.UpdateTimePassed();
+            this._timer.Start();
+        }
+
+        private void ToFoundationClick( Object sender, RoutedEventArgs e ) {
+
+            // if a card was moved to the foundation
+            // we keep checking until there's no more possible moves
+            Boolean moved;
+
+            do
+            {
+                moved = this.SendToFoundation( this._waste );
+
+                foreach (var tableau in this._tableaus.Where(this.SendToFoundation))
+                {
+                    moved = true;
+                }
+            } while ( moved == true );
+        }
+
+        private void UpdateStockLeft() {
+            this.StockLeft.Text = "In stock: " + this._stock.Children.Count;
+        }
+
+        private void UpdateTimePassed() {
+            this.TimePassed.Text = "Time: " + Utilities.TimeToString( ( Int32 )this._secondsPassed );
+        }
+
+        // data use for the drag and drop operation of cards
+        public struct Drag {
+            public const Int32 Diff = 25;
+
+            // space between each card during the drag
+            public List<Card> CardsDragging;
+
+            public Point ClickPosition;
+            public Container HighlightedContainer;
+            public Boolean IsDragging;
+            public Container OriginalContainer;    // original container before the drag occurred. if the drag isn't valid, we need to return the cards to the original place
+
+            // when dragging a card on top of a container, highlight that container, and keep a reference to it (to know when to remove the highlight)
+        }
+
+        /**
+         * Checks if the game has ended, and if so then show a message.
+         * The game is over when all the cards are in the foundations.
+         */
+        /**
+         * When we click on the stock, we move 3 cards to the waste.
+         */
+        /**
+         * Try to send the last card of a container to a foundation.
+         */
+        /**
+         * Calculates the intersection area between the reference element and the droppable elements, and returns the one where the area was higher.
+         */
+        /**
+         * When the window is resized, we need to reposition the game elements.
+         */
+        /**
+         * Position/resize all the elements in the right place (given the current width/height of the canvas).
+         */
         /**
          * Finishes the drag operation, moving a list of cards to a container.
          */
-        private void moveCards( List<Card> cards, Container container )
-            {
-            if ( this.drag.highlightedContainer != null )
-                {
-                this.drag.highlightedContainer.removeDropEffect();
-                this.drag.highlightedContainer = null;
-                }
-
-            foreach( Card card in cards )
-                {
-                var parent = card.Parent as Panel;
-                parent.Children.Remove( card );
-                container.Children.Add( card );
-                }
-
-            this.drag.originalContainer = null;
-            this.drag.cardsDragging.Clear();
-            this.drag.isDragging = false;
-            }
-
-
-        private void positionCards( List<Card> cards, MouseEventArgs e )
-            {
-            var position = e.GetPosition( this.MainCanvas );
-
-            for (int a = 0 ; a < cards.Count ; a++)
-                {
-                Canvas.SetLeft( cards[ a ], position.X - this.drag.clickPosition.X );
-                Canvas.SetTop( cards[ a ], position.Y - this.drag.clickPosition.Y + Drag.diff * a );
-                }
-
-            var container = this.collisionDetection( cards );
-
-            if ( this.drag.highlightedContainer != null )
-                {
-                this.drag.highlightedContainer.removeDropEffect();
-                this.drag.highlightedContainer = null;
-                }
-
-            if ( container != null )
-                {
-                container.applyDropEffect();
-
-                this.drag.highlightedContainer = container;
-                }
-            }
-
-
         /**
          * Determine the dimensions of the cards stack.
          * Use the first card to determine the x/y/width.
          * The height is calculated from the number of cards.
          * The 'diff' is the space between each card.
          */
-        private Utilities.Box cardsDimension( List<Card> cards )
-            {
-            var firstCard = cards[ 0 ];
-            return new Utilities.Box {
-                x = Canvas.GetLeft( firstCard ),
-                y = Canvas.GetTop( firstCard ),
-                width = firstCard.ActualWidth,
-                height = firstCard.ActualHeight + Drag.diff * (cards.Count - 1)
-                };
-            }
-
-
         /**
          * Depending on where the card is located, it may be draggable or not.
          */
-        private bool isCardDraggable( Card card )
-            {
-            var parent = card.Parent;
-
-            if ( parent is Stock )
-                {
-                return false;
-                }
-
-                // the last card is draggable, the others aren't
-            if ( parent is Waste )
-                {
-                if ( this.waste.Children.Count != 0 )
-                    {
-                    var last = this.waste.Children[ this.waste.Children.Count - 1 ];
-
-                    if ( last != card )
-                        {
-                        return false;
-                        }
-                    }
-                }
-
-            return true;
-            }
-
-
-        private void newGameClick( object sender, RoutedEventArgs e )
-            {
-            this.startGame();
-            }
-
-
-        private void updateStockLeft()
-            {
-            this.StockLeft.Text = "In stock: " + this.stock.Children.Count;
-            }
-
-
-        private void updateTimePassed()
-            {
-            this.TimePassed.Text = "Time: " + Utilities.timeToString( (int) this.secondsPassed );
-            }
-
-
-        private void onTimeElapsed( Object source, ElapsedEventArgs e )
-            {
-            this.Dispatcher.Invoke( (Action) (() =>
-                {
-                this.secondsPassed++;
-                this.updateTimePassed();
-                }));
-            }
-
-
-        private void onWindowClosing( object sender, System.ComponentModel.CancelEventArgs e )
-            {
-            this.timer.Stop();
-            }
-
-
-        private void openStatisticsWindow( object sender, RoutedEventArgs e )
-            {
-            var statistics = new Statistics();
-            statistics.ShowDialog();
-            }
-
-
-        private void openAboutPage( object sender, RoutedEventArgs e )
-            {
-            System.Diagnostics.Process.Start( "https://bitbucket.org/drk4/gold_mine" );
-            }
-
-
         /**
          * Tries to move all the possible cards from the waste/tableau to the foundation.
          * Useful for the ending of a game, so that you don't have to manually move all the last cards.
          */
-        private void toFoundationClick( object sender, RoutedEventArgs e )
-            {
-                // if a card was moved to the foundation
-                // we keep checking until there's no more possible moves
-            bool moved = false;
-
-            do
-                {
-                moved = false;
-
-                if ( this.sendToFoundation( this.waste ) )
-                    {
-                    moved = true;
-                    }
-
-                foreach ( var tableau in this.tableaus )
-                    {
-                    if ( this.sendToFoundation( tableau ) )
-                        {
-                        moved = true;
-                        }
-                    }
-                }
-
-            while ( moved == true );
-            }
-
-
-        private void restartGame( object sender, RoutedEventArgs e )
-            {
-            this.startGame( false );
-            }
-        }
     }
+}
