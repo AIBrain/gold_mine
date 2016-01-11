@@ -9,9 +9,9 @@
         Title="Gold Mine" Height="650" Width="1000"
         MinWidth="600" MinHeight="400"
         SizeChanged="OnSizeChange" StateChanged="OnStateChange"
-        Closing="OnWindowClosing">
+        Closing="OnWindowClosing" Loaded="Window_Loaded">
     <DockPanel>
-        <DockPanel Name="Menu" DockPanel.Dock="Top" LastChildFill="False" Background="LightGray">
+        <DockPanel Name="Menu" DockPanel.Dock="Top" LastChildFill="False" Background="LightGray" >
             <Button Margin="2,2,2,6" Click="NewGameClick" ToolTip="ctrl + n">New Game</Button>
             <Button Margin="2,2,2,6" Click="RestartGame" ToolTip="ctrl + r">Restart</Button>
             <Button Margin="2,2,2,6" Click="OpenStatisticsWindow" ToolTip="ctrl + s">Statistics</Button>

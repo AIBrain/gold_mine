@@ -50,3 +50,4 @@ P:\Projects 2016\GoldMine\obj\Debug\GoldMine.Properties.Resources.resources
 P:\Projects 2016\GoldMine\obj\Debug\GoldMine.csproj.GenerateResource.Cache
 P:\Projects 2016\GoldMine\obj\Debug\GoldMine.exe
 P:\Projects 2016\GoldMine\obj\Debug\GoldMine.pdb
+P:\Projects 2016\GoldMine\obj\Debug\GoldMine_Content.g.cs

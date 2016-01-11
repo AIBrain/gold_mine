@@ -200,6 +200,11 @@
   <ItemGroup>
     <Resource Include="images\game_example.png" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="sounds\drawcard.wav" />
+    <None Include="sounds\cardflip.wav" />
+    <Content Include="sounds\cardshuffle.wav" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

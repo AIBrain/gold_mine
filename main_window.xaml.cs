@@ -1,72 +1,31 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Timers;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
+﻿using System.Media;
 
 namespace GoldMine {
+
+    using System;
+    using System.Collections.Generic;
+    using System.Diagnostics;
+    using System.Linq;
+    using System.Timers;
+    using System.Windows;
+    using System.Windows.Controls;
+    using System.Windows.Input;
 
     public partial class MainWindow {
         private readonly List<Card> _cards = new List<Card>();
 
         private readonly List<Container> _droppableElements = new List<Container>();
         private readonly List<Foundation> _foundations = new List<Foundation>();
-        private readonly Stock _stock;
         private readonly List<Tableau> _tableaus = new List<Tableau>();
-        private readonly Timer _timer;
-        private readonly Waste _waste;
         private Drag _drag;
         private UInt32 _secondsPassed;
+        private Stock _stock;
+        private Timer _timer;
+        private Waste _waste;
 
         public MainWindow() {
             InitializeComponent();
-
-            this._drag.CardsDragging = new List<Card>();
-            this._timer = new Timer( 1000 );
-            this._timer.Elapsed += this.OnTimeElapsed;
-
-            this.SetupKeyboardShortcuts();
-            Data.Load();
-
-            // initialize all the game elements
-            this._stock = new Stock();
-            this._stock.MouseUp += this.OnStockMouseUp;
-            this.MainCanvas.Children.Add( this._stock );
-
-            this._waste = new Waste();
-            this.MainCanvas.Children.Add( this._waste );
-
-            for ( var a = 0; a < 4; a++ ) {
-                var foundation = new Foundation();
-
-                this.MainCanvas.Children.Add( foundation );
-                this._droppableElements.Add( foundation );
-                this._foundations.Add( foundation );
-            }
-
-            for ( var a = 0; a < 7; a++ ) {
-                var tableau = new Tableau();
-
-                this.MainCanvas.Children.Add( tableau );
-                this._droppableElements.Add( tableau );
-                this._tableaus.Add( tableau );
-            }
-
-            foreach ( Card.Suit suit in Enum.GetValues( typeof( Card.Suit ) ) ) {
-                foreach ( Card.Value value in Enum.GetValues( typeof( Card.Value ) ) ) {
-                    var card = new Card( suit, value );
-
-                    card.MouseDown += this.onMouseDown;
-                    card.MouseMove += this.onMouseMove;
-                    card.MouseUp += this.onMouseUp;
-
-                    this._cards.Add( card );
-                }
-            }
-
-            this.StartGame();
+            this.IsReadyForGame = false;
         }
 
         private Utilities.Box CardsDimension( List<Card> cards ) {
@@ -92,7 +51,7 @@ namespace GoldMine {
                 this._timer.Stop();
 
                 var best = Data.OneMoreWin( this._secondsPassed );
-                var message = String.Format( "You Win!\nTime: {0}", Utilities.TimeToString( ( Int32 )this._secondsPassed ) );
+                var message = String.Format( "You Win!\nTime: {0}", this._secondsPassed.TimeToString() );
 
                 if ( this._secondsPassed == best ) {
                     message += "\nYou beat your best time!";
@@ -237,16 +196,20 @@ namespace GoldMine {
         }
 
         private void OnStockMouseUp( Object sender, MouseButtonEventArgs e ) {
+            Utilities.SoundPlayers.Value.Stream = Properties.Resources.drawcard;   //TODO this needs a better place
+            Utilities.SoundPlayers.Value.Play();
+
             var count = this._stock.Children.Count;
 
             for ( var a = 0; a < 3 && count > 0; a++ ) {
                 var lastPosition = count - 1;
 
-                var card = ( Card )this._stock.Children[ lastPosition ];
+                var card = this._stock.Children[ lastPosition ] as Card;
                 this._stock.Children.RemoveAt( lastPosition );
-                this._waste.Children.Add( card );
-
-                card.showFront();
+                if ( card != null ) {
+                    this._waste.Children.Add( card );
+                    card.ShowFront();
+                }
 
                 count = this._stock.Children.Count;
             }
@@ -266,7 +229,7 @@ namespace GoldMine {
         }
 
         private void OpenAboutPage( Object sender, RoutedEventArgs e ) {
-            System.Diagnostics.Process.Start( "https://bitbucket.org/drk4/gold_mine" );
+            Process.Start( "https://bitbucket.org/drk4/gold_mine" );
         }
 
         private void OpenStatisticsWindow( Object sender, RoutedEventArgs e ) {
@@ -297,6 +260,9 @@ namespace GoldMine {
         }
 
         private void PositionResizeElements() {
+            if ( !this.IsReadyForGame ) {
+                return;
+            }
 
             // the layout is a grid with 7 columns and 3 lines
             // each position has space for a card + margin
@@ -446,6 +412,8 @@ namespace GoldMine {
             this._secondsPassed = 0;
             this.UpdateTimePassed();
             this._timer.Start();
+
+            this.PositionResizeElements();
         }
 
         private void ToFoundationClick( Object sender, RoutedEventArgs e ) {
@@ -454,12 +422,10 @@ namespace GoldMine {
             // we keep checking until there's no more possible moves
             Boolean moved;
 
-            do
-            {
+            do {
                 moved = this.SendToFoundation( this._waste );
 
-                foreach (var tableau in this._tableaus.Where(this.SendToFoundation))
-                {
+                foreach ( var tableau in this._tableaus.Where( this.SendToFoundation ) ) {
                     moved = true;
                 }
             } while ( moved == true );
@@ -470,7 +436,61 @@ namespace GoldMine {
         }
 
         private void UpdateTimePassed() {
-            this.TimePassed.Text = "Time: " + Utilities.TimeToString( ( Int32 )this._secondsPassed );
+            this.TimePassed.Text = "Time: " + this._secondsPassed.TimeToString();
+        }
+
+        private void Window_Loaded( Object sender, RoutedEventArgs e ) {
+            this._drag.CardsDragging = new List<Card>();
+            this._timer = new Timer( 1000 );
+            this._timer.Elapsed += this.OnTimeElapsed;
+
+            this.SetupKeyboardShortcuts();
+            Data.Load();
+
+            // initialize all the game elements
+            this._stock = new Stock();
+            this._stock.MouseUp += this.OnStockMouseUp;
+            this.MainCanvas.Children.Add( this._stock );
+
+            this._waste = new Waste();
+
+            this.MainCanvas.Children.Add( this._waste );
+
+            for ( var a = 0; a < 4; a++ ) {
+                var foundation = new Foundation();
+
+                this.MainCanvas.Children.Add( foundation );
+                this._droppableElements.Add( foundation );
+                this._foundations.Add( foundation );
+            }
+
+            for ( var a = 0; a < 7; a++ ) {
+                var tableau = new Tableau();
+
+                this.MainCanvas.Children.Add( tableau );
+                this._droppableElements.Add( tableau );
+                this._tableaus.Add( tableau );
+            }
+
+            foreach ( Card.Suit suit in Enum.GetValues( typeof( Card.Suit ) ) ) {
+                foreach ( Card.Value value in Enum.GetValues( typeof( Card.Value ) ) ) {
+                    var card = new Card( suit, value );
+
+                    card.MouseDown += this.onMouseDown;
+                    card.MouseMove += this.onMouseMove;
+                    card.MouseUp += this.onMouseUp;
+
+                    this._cards.Add( card );
+                }
+            }
+
+            this.IsReadyForGame = true;
+
+            this.StartGame();
+        }
+
+        public Boolean IsReadyForGame {
+            get; set;
         }
 
         // data use for the drag and drop operation of cards
