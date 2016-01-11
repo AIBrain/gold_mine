@@ -1,1 +1,5 @@
 *.suo
+obj/Debug/TempPE/Properties.Resources.Designer.cs.dll
+bin/Debug/GoldMine.exe
+bin/Debug/GoldMine.exe.config
+*.pdb

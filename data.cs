@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using Newtonsoft.Json;
@@ -12,24 +13,35 @@ namespace GoldMine {
 
         private const String FileName = "data_debug.txt";
 
-        private static String _dataPATH = Path.Combine( Environment.GetFolderPath( Environment.SpecialFolder.LocalApplicationData ), "gold_mine", FileName );
+        public static String DataPATH {
+            get;
+        } =
+            Path.Combine( Environment.GetFolderPath( Environment.SpecialFolder.LocalApplicationData ), "gold_mine",
+                FileName );
 
         public static void Load() {
             try {
-                var file = new StreamReader( _dataPATH, Encoding.UTF8 );
+                if ( File.Exists( DataPATH ) ) {
 
-                var jsonData = file.ReadToEnd();
-                file.Close();
+                    using ( var file = new StreamReader( DataPATH ) ) {
 
-                DATA = JsonConvert.DeserializeObject<AppData>( jsonData );
+                        var jsonData = file.ReadToEnd();
+                        file.Close();
 
-                if ( DATA.Version != DataVersion ) {
-                    Update();
+                        DATA = JsonConvert.DeserializeObject<AppData>( jsonData );
+
+                        if ( DATA.Version != DataVersion ) {
+                            Update();
+                        }
+                    }
+
+                    return;
                 }
             }
-            catch ( Exception ) {
-                LoadDefaults();
+            catch ( Exception exception ) {
+                Debug.WriteLine( exception.Message );
             }
+            LoadDefaults();
         }
 
         public static UInt32 OneMoreWin( UInt32 time ) {
@@ -67,8 +79,8 @@ namespace GoldMine {
             var dataJson = JsonConvert.SerializeObject( DATA );
 
             // make sure there's a directory created (otherwise the stream writer call will fail)
-            Directory.CreateDirectory( Path.GetDirectoryName( _dataPATH ) );
-            var file = new StreamWriter( _dataPATH, false, Encoding.UTF8 );
+            Directory.CreateDirectory( Path.GetDirectoryName( DataPATH ) );
+            var file = new StreamWriter( DataPATH, false, Encoding.UTF8 );
 
             file.Write( dataJson );
             file.Close();

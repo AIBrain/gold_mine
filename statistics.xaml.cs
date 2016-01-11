@@ -44,7 +44,7 @@ namespace GoldMine {
                 this.BestTime.Text = "---";
             }
             else {
-                this.BestTime.Text = Utilities.TimeToString( ( Int32 )bestTime );
+                this.BestTime.Text = (( Int32 )bestTime).TimeToString();
             }
         }
     }

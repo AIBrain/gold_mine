@@ -1,20 +1,21 @@
-﻿using System;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media;
+﻿using System.Media;
 
 namespace GoldMine {
+    using System;
+    using System.Windows;
+    using System.Windows.Controls;
+    using System.Windows.Media;
 
     public class Card : Image {
         public const Double OriginalHeight = 976;
         public const Double OriginalWidth = 672;
         public const Double Ratio = OriginalWidth / OriginalHeight;
 
-        public Color color;
+        public readonly Color color;
 
-        public Suit suit;
+        public readonly Suit suit;
 
-        public Value value;
+        public readonly Value value;
 
         public enum Color { black, red };
 
@@ -37,16 +38,18 @@ namespace GoldMine {
         }
 
         public void ShowBack() {
-            var mainResources = Application.Current.Resources;
+            //Utilities.SoundPlayer = new SoundPlayer( Properties.Resources.cardflip );Utilities.SoundPlayer.PlaySync();
 
-            this.Source = mainResources[ "card_back" ] as ImageSource;
+            this.Source = Application.Current.Resources[ "card_back" ] as ImageSource;
         }
 
-        public void showFront() {
-            var mainResources = Application.Current.Resources;
+        public void ShowFront()
+        {
+            Utilities.SoundPlayers.Value.Stream = Properties.Resources.cardflip;
+            Utilities.SoundPlayers.Value.Play();
 
             var imageName = this.value + "_of_" + this.suit;
-            this.Source = mainResources[ imageName ] as ImageSource;
+            this.Source = Application.Current.Resources[ imageName ] as ImageSource;
         }
     }
 }

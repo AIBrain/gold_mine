@@ -1,9 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Media;
+using System.Threading;
+using GoldMine.Properties;
 
 namespace GoldMine {
 
     public static class Utilities {
+
+        public static ThreadLocal< SoundPlayer> SoundPlayers { get; } = new ThreadLocal<SoundPlayer>(() => new SoundPlayer(), true);
+
+        public static Random Random { get; } = new Random();
 
         public static Boolean BoxBoxCollision( Box one, Box two ) {
             return !(
@@ -28,15 +35,17 @@ namespace GoldMine {
             return 0;
         }
 
-        public static void Shuffle<TType>(this List<TType> list ) {
+        public static void Shuffle<TType>( this List<TType> list ) {
             var currentIndex = list.Count;
-            var random = new Random();
+
+            SoundPlayers.Value.Stream = Resources.cardshuffle;
+            SoundPlayers.Value.Play();
 
             // while there's still elements to shuffle
             while ( currentIndex != 0 ) {
 
                 // pick a remaining element
-                var randomIndex = random.Next( currentIndex );
+                var randomIndex = Random.Next( currentIndex );
                 currentIndex--;
 
                 // swap it with the current element
@@ -46,8 +55,8 @@ namespace GoldMine {
             }
         }
 
-        public static String TimeToString( Int32 seconds ) {
-            var minute = 60;
+        public static String TimeToString( this Int32 seconds ) {
+            const Int32 minute = 60;
             var minutesCount = 0;
 
             while ( seconds >= minute ) {
@@ -56,10 +65,27 @@ namespace GoldMine {
             }
 
             if ( minutesCount != 0 ) {
-                return String.Format( "{0}m {1}s", minutesCount, seconds );
+                return $"{minutesCount}m {seconds}s";
             }
             else {
-                return String.Format( "{0}s", seconds );
+                return $"{seconds}s";
+            }
+        }
+
+        public static String TimeToString( this UInt32 seconds ) {
+            const UInt32 minute = 60;
+            var minutesCount = 0;
+
+            while ( seconds >= minute ) {
+                minutesCount++;
+                seconds -= minute;
+            }
+
+            if ( minutesCount != 0 ) {
+                return $"{minutesCount}m {seconds}s";
+            }
+            else {
+                return $"{seconds}s";
             }
         }
 
